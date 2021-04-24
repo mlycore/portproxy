@@ -15,6 +15,6 @@ portproxy:
 trace:
 	LOGLEVEL=TRACE ./bin/portproxy -backend="127.0.0.1:3306" -bind=":3307"
 debug:
-	LOGLEVEL=DEBUG ./bin/portproxy -backend="127.0.0.1:3306" -bind=":3307"
+	LOGLEVEL=DEBUG ./bin/portproxy -backend="127.0.0.1:3306" -bind=":3307" -verbose
 clean:
 	rm -r bin
