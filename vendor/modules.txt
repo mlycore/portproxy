@@ -7,3 +7,6 @@ github.com/arstercz/goconfig
 # github.com/go-sql-driver/mysql v1.6.0
 ## explicit
 github.com/go-sql-driver/mysql
+# github.com/mlycore/log v0.2.7
+## explicit
+github.com/mlycore/log
