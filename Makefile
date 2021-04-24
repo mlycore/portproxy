@@ -13,8 +13,8 @@ run:
 portproxy:
 	make clean && make build && make run
 trace:
-	LOGLEVEL=TRACE ./bin/portproxy -backend="127.0.0.1:3306" -bind=":3307"
+	make build && LOGLEVEL=TRACE ./bin/portproxy -backend="127.0.0.1:3306" -bind=":3307" -verbose
 debug:
-	LOGLEVEL=DEBUG ./bin/portproxy -backend="127.0.0.1:3306" -bind=":3307" -verbose
+	make build && LOGLEVEL=DEBUG ./bin/portproxy -backend="127.0.0.1:3306" -bind=":3307" -verbose
 clean:
 	rm -r bin
