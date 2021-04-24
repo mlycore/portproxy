@@ -2,7 +2,8 @@ package main
 
 import (
 	"io"
-	"log"
+	"github.com/mlycore/log"
+	"io/ioutil"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -39,45 +40,52 @@ func (t *Proxy) pipe(dst, src *Conn, c chan int64, tag string) {
 		dst.CloseWrite()
 		dst.CloseRead()
 	}()
+	// local->proxy
 	if strings.EqualFold(tag, "send") {
 		proxyLog(src, dst)
 		c <- 0
 	} else {
+	// proxy->local
 		n, err := io.Copy(dst, src)
+		data, err := ioutil.ReadAll(src)
+		log.Errorf("receive read dst: %d, %s", n, string(data))
 		if err != nil {
-			log.Print(err)
+			log.Errorln(err)
 		}
 		c <- n
 	}
 }
 
-func (t *Proxy) transport(conn net.Conn) {
+func (t *Proxy) transport(local net.Conn) {
 	start := time.Now()
-	conn2, err := net.DialTCP("tcp", nil, t.backend)
+	proxy, err := net.DialTCP("tcp", nil, t.backend)
 	if err != nil {
-		log.Print(err)
+		log.Errorln(err)
 		return
 	}
 	connectTime := time.Now().Sub(start)
-	log.Printf("proxy: %s ==> %s", conn2.LocalAddr().String(),
-		conn2.RemoteAddr().String())
+	log.Infof("proxy: %s ==> %s", proxy.LocalAddr().String(),
+		proxy.RemoteAddr().String())
 	start = time.Now()
 	readChan := make(chan int64)
 	writeChan := make(chan int64)
 	var readBytes, writeBytes int64
 
 	atomic.AddInt32(&t.sessionsCount, 1)
-	var bindConn, backendConn *Conn
-	bindConn = NewConn(conn, t.pool)
-	backendConn = NewConn(conn2, t.pool)
+	var localConn, proxyConn *Conn
+	localConn = NewConn(local, t.pool)
+	proxyConn = NewConn(proxy, t.pool)
 
-	go t.pipe(backendConn, bindConn, writeChan, "send")
-	go t.pipe(bindConn, backendConn, readChan, "receive")
+	go t.pipe(proxyConn, localConn, writeChan, "send") //localConn -> proxyConn
+	go t.pipe(localConn, proxyConn, readChan, "receive") //proxyConn -> localConn
 
-	readBytes = <-readChan
+	// blocked here, waiting for all communication finished
+	readBytes = <-readChan //once proxy->local, it's been run
+	log.Errorf("readBytes: %d", readBytes)
 	writeBytes = <-writeChan
+	log.Errorf("writeBytes: %d", writeBytes)
 	transferTime := time.Now().Sub(start)
-	log.Printf("r: %d w:%d ct:%.3f t:%.3f [#%d]", readBytes, writeBytes,
+	log.Fatalf("r: %d w:%d ct:%.3f t:%.3f [#%d]", readBytes, writeBytes,
 		connectTime.Seconds(), transferTime.Seconds(), t.sessionsCount)
 	atomic.AddInt32(&t.sessionsCount, -1)
 }
@@ -85,17 +93,17 @@ func (t *Proxy) transport(conn net.Conn) {
 func (t *Proxy) Start() {
 	ln, err := net.ListenTCP("tcp", t.bind)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 
 	defer ln.Close()
 	for {
 		conn, err := ln.AcceptTCP()
 		if err != nil {
-			log.Println("accept:", err)
+			log.Errorf("accept:", err)
 			continue
 		}
-		log.Printf("client: %s ==> %s", conn.RemoteAddr().String(),
+		log.Infof("client: %s ==> %s", conn.RemoteAddr().String(),
 			conn.LocalAddr().String())
 		go t.transport(conn)
 	}

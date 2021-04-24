@@ -11,8 +11,7 @@ import (
 	"database/sql"
 	"flag"
 	"github.com/VividCortex/godaemon"
-	"log"
-	"log/syslog"
+	"github.com/mlycore/log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,10 +23,11 @@ func waitSignal() {
 	var sigChan = make(chan os.Signal, 1)
 	signal.Notify(sigChan)
 	for sig := range sigChan {
-		if sig == syscall.SIGINT || sig == syscall.SIGTERM {
-			log.Printf("terminated by signal %v\n", sig)
-		} else {
-			log.Printf("received signal: %v, ignore\n", sig)
+		switch sig {
+		case syscall.SIGINT: fallthrough
+		case syscall.SIGTERM: log.Infof("terminated by signal %v", sig); os.Exit(0)
+		default:
+			log.Infof("received signal: %v, ignore", sig)
 		}
 	}
 }
@@ -38,6 +38,10 @@ const timeout = time.Second * 2
 var Bsize uint
 var Verbose bool
 var Dbh *sql.DB
+
+func init() {
+	log.SetLevel(os.Getenv("LOGLEVEL"))
+}
 
 func main() {
 	// options
@@ -60,31 +64,31 @@ func main() {
 
 	conf_fh, err := get_config(conf)
 	if err != nil {
-		log.Printf("Can't get config info, skip insert log to mysql...\n")
+		log.Errorf("Can't get config info, skip insert log to mysql...")
 	} else {
 	    backend_dsn, _ := get_backend_dsn(conf_fh)
 	    Dbh, err = dbh(backend_dsn)
     	if err != nil {
-	    	log.Printf("Can't get database handle, skip insert log to mysql...\n")
+	    	log.Errorf("Can't get database handle, skip insert log to mysql...")
 	    }
 	    defer Dbh.Close()
     }
 
-	log.SetOutput(os.Stdout)
-	if logTo == "syslog" {
-		w, err := syslog.New(syslog.LOG_INFO, "portproxy")
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.SetOutput(w)
-	}
+	//log.SetOutput(os.Stdout)
+	//if logTo == "syslog" {
+	//	w, err := syslog.New(syslog.LOG_INFO, "portproxy")
+	//	if err != nil {
+	//		log.Fatal(err)
+	//	}
+	//	log.SetOutput(w)
+	//}
 
 	if daemon == true {
 		godaemon.MakeDaemon(&godaemon.DaemonAttr{})
 	}
 
 	p := New(bind, backend, uint32(buffer))
-	log.Println("portproxy started.")
+	log.Infof("portproxy started.")
 	go p.Start()
 	waitSignal()
 }

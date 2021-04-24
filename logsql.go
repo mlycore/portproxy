@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"github.com/mlycore/log"
 	"strconv"
 	"strings"
 )
@@ -112,56 +112,58 @@ func sql_escape(s string) string {
 	return string(desc[0:j])
 }
 
-func proxyLog(src, dst *Conn) {
+func proxyLog(local, proxy *Conn) {
 	buffer := make([]byte, Bsize)
 	var sqlInfo query
-	sqlInfo.client, sqlInfo.cport = ipPortFromNetAddr(src.conn.RemoteAddr().String())
-	sqlInfo.server, sqlInfo.sport = ipPortFromNetAddr(dst.conn.RemoteAddr().String())
-	_, sqlInfo.bindPort = ipPortFromNetAddr(src.conn.LocalAddr().String())
+	sqlInfo.client, sqlInfo.cport = ipPortFromNetAddr(local.conn.RemoteAddr().String())
+	sqlInfo.server, sqlInfo.sport = ipPortFromNetAddr(proxy.conn.RemoteAddr().String())
+	_, sqlInfo.bindPort = ipPortFromNetAddr(local.conn.LocalAddr().String())
 
 	for {
-		n, err := src.Read(buffer)
+		n, err := local.Read(buffer)
+		log.Errorf("local read buffer: %d, %s", n, string(buffer))
 		if err != nil {
+			log.Errorf("local read buffer error: %s", err)
 			return
 		}
 		if n >= 5 {
 			var verboseStr string
 			switch buffer[4] {
 			case comQuit:
-				verboseStr = fmt.Sprintf("From %s To %s; Quit: %s\n", sqlInfo.client, sqlInfo.server, "user quit")
+				verboseStr = fmt.Sprintf("From %s To %s; Quit: %s", sqlInfo.client, sqlInfo.server, "user quit")
 				sqlInfo.sqlType = "Quit"
 			case comInitDB:
-				verboseStr = fmt.Sprintf("From %s To %s; schema: use %s\n", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
+				verboseStr = fmt.Sprintf("From %s To %s; schema: use %s", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
 				sqlInfo.sqlType = "Schema"
 			case comQuery:
-				verboseStr = fmt.Sprintf("From %s To %s; Query: %s\n", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
+				verboseStr = fmt.Sprintf("From %s To %s; Query: %s", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
 				sqlInfo.sqlType = "Query"
 			//case comFieldList:
-			//	verboseStr = log.Printf("From %s To %s; Table columns list: %s\n", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
+			//	verboseStr = log.Printf("From %s To %s; Table columns list: %s", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
 			//	sqlInfo.sqlType = "Table columns list"
 			case comCreateDB:
-				verboseStr = fmt.Sprintf("From %s To %s; CreateDB: %s\n", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
+				verboseStr = fmt.Sprintf("From %s To %s; CreateDB: %s", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
 				sqlInfo.sqlType = "CreateDB"
 			case comDropDB:
-				verboseStr = fmt.Sprintf("From %s To %s; DropDB: %s\n", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
+				verboseStr = fmt.Sprintf("From %s To %s; DropDB: %s", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
 				sqlInfo.sqlType = "DropDB"
 			case comRefresh:
-				verboseStr = fmt.Sprintf("From %s To %s; Refresh: %s\n", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
+				verboseStr = fmt.Sprintf("From %s To %s; Refresh: %s", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
 				sqlInfo.sqlType = "Refresh"
 			case comStmtPrepare:
-				verboseStr = fmt.Sprintf("From %s To %s; Prepare Query: %s\n", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
+				verboseStr = fmt.Sprintf("From %s To %s; Prepare Query: %s", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
 				sqlInfo.sqlType = "Prepare Query"
 			case comStmtExecute:
-				verboseStr = fmt.Sprintf("From %s To %s; Prepare Args: %s\n", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
+				verboseStr = fmt.Sprintf("From %s To %s; Prepare Args: %s", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
 				sqlInfo.sqlType = "Prepare Args"
 			case comProcessKill:
-				verboseStr = fmt.Sprintf("From %s To %s; Kill: kill conntion %s\n", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
+				verboseStr = fmt.Sprintf("From %s To %s; Kill: kill conntion %s", sqlInfo.client, sqlInfo.server, string(buffer[5:n]))
 				sqlInfo.sqlType = "Kill"
 			default:
 			}
 
 			if Verbose {
-				log.Print(verboseStr)
+				log.Tracef(verboseStr)
 			}
 
 			if strings.EqualFold(sqlInfo.sqlType, "Quit") {
@@ -176,7 +178,8 @@ func proxyLog(src, dst *Conn) {
 
 		}
 
-		_, err = dst.Write(buffer[0:n])
+		log.Errorf("proxy write buffer: %s", buffer[0:n])
+		_, err = proxy.Write(buffer[0:n])
 		if err != nil {
 			return
 		}
